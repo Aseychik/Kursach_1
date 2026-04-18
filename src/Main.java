@@ -20,7 +20,7 @@ public class Main extends JFrame {
     boolean is_draw_dev = false;
     int count_dev = 3;
     List<Point> connectedPoints = null;
-
+    boolean connect_points = false;
 
     @Override
     public void paint(Graphics g) {
@@ -55,6 +55,11 @@ public class Main extends JFrame {
             public void actionPerformed(ActionEvent e) {
                 isShowPoints = !isShowPoints;
                 canvas.repaint();
+            }
+        }, connect_button_action = new AbstractAction("ConnectSwitch") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                connect_points = !connect_points;
             }
         }, importAction = new AbstractAction("Import") {
             @Override
@@ -121,6 +126,10 @@ public class Main extends JFrame {
 
         canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_E, 0), "ConnectPoints");
         canvasPanel.getActionMap().put("ConnectPoints", connectPointsAction);
+
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_P, 0), "ConnectSwitch");
+        canvasPanel.getActionMap().put("ConnectSwitch", connect_button_action);
+
 
         canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_E, 0, true), "ReleaseE");
@@ -387,6 +396,10 @@ public class Main extends JFrame {
             for (BezierLine line : bezierLines) {
                 sel = line.getNearPoint(pos, d);
                 if (sel != null) {
+                    if (connect_points) {
+                        BezierLine l = bezierLines.get(p + 1);
+
+                    }
                     selectedPoint = sel;
                     selectedLine = p + 1;
                     repaint();
@@ -427,59 +440,14 @@ public class Main extends JFrame {
         public void mouseDragged(MouseEvent e) {
             Point ePoint = e.getPoint();
             if (selectedPoint != null) {
+                int type_m = 0;
                 BezierLine selected = bezierLines.get(selectedLine);
-                if (selected.is_composite == -1 || selected.is_composite == 2) {
-                    if (selected.points.getFirst() == selectedPoint)
-                        for (Point p : new Point[]{selected.joined_points[0][0], selected.joined_points[0][1], selected.points.get(1)}) {
-                            p.x += ePoint.x - selectedPoint.x;
-                            p.y += ePoint.y - selectedPoint.y;
-                        }
-                    else if (selected.points.size() > 1 && selected.points.get(1) == selectedPoint) {
-                        try {
-                            Point2D sp = new Point2D(selected.points.getFirst()),
-                                    next = new Point2D(selected.points.get(1)),
-                                    prev = new Point2D(selected.joined_points[0][1]);
-                            double t = Point2D.div(sp, prev).length();
-                            Point t2 = Point2D.add(sp, Point2D.multiply(Point2D.div(sp, next).normalize(), t)).toIntegerPoint(1);
-                            selected.joined_points[0][1].x = t2.x;
-                            selected.joined_points[0][1].y = t2.y;
-                        } catch (Exception exception) {
-                            // теоретически должно быть, но тогда нужно сделать то, как оттаскивать эти точки
-                            /*selected.joined_points[0][1].x = ePoint.x;
-                            selected.joined_points[0][1].y = ePoint.y;*/
-                            System.out.println(exception.getMessage());
-                        }
-                    }
-
+                boolean b = selected.shift_compose(selectedPoint, ePoint, type_m);
+                selected.move_not_end_compose(selectedPoint, ePoint, type_m);
+                if (b) {
+                    selectedPoint.x = ePoint.x;
+                    selectedPoint.y = ePoint.y;
                 }
-                if (selected.is_composite == 1 || selected.is_composite == 2) {
-                    Point prev2 = selected.points.get(selected.points.size() - 2);
-                    if (selected.points.getLast() == selectedPoint)
-                        for (Point p : new Point[]{selected.joined_points[1][0], selected.joined_points[1][1], prev2}) {
-                            p.x += ePoint.x - selectedPoint.x;
-                            p.y += ePoint.y - selectedPoint.y;
-                        }
-                    else if (selected.points.size() > 1 && prev2 == selectedPoint) {
-                        try {
-
-                            Point2D sp = new Point2D(selected.points.getLast()),
-                                    next = new Point2D(prev2),
-                                    prev = new Point2D(selected.joined_points[1][1]);
-                            double t = Point2D.div(sp, prev).length();
-                            Point t2 = Point2D.add(sp, Point2D.multiply(Point2D.div(sp, next).normalize(), t)).toIntegerPoint(1);
-                            selected.joined_points[1][1].x = t2.x;
-                            selected.joined_points[1][1].y = t2.y;
-                        } catch (Exception exception) {
-                            // теоретически должно быть, но тогда нужно сделать то, как оттаскивать эти точки
-                            /*selected.joined_points[1][1].x = ePoint.x;
-                            selected.joined_points[1][1].y = ePoint.y;*/
-                            System.out.println(exception.getMessage());
-                        }
-                    }
-
-                }
-                selectedPoint.x = e.getPoint().x;
-                selectedPoint.y = e.getPoint().y;
                 repaint();
             }
         }
