@@ -8,9 +8,8 @@ import java.util.List;
 import static java.lang.Math.*;
 
 public class Main extends JFrame {
-    Point selectedPoint = null;
+    Point2D selectedPoint = null;
     JPanel canvas;
-    List<Point> points = new ArrayList<>();
     List<BezierLine> bezierLines = new ArrayList<>();
     int selectedLine = -1;
     Color lineColor = Color.black, pointColor = Color.green, bgColor = Color.WHITE;
@@ -19,8 +18,13 @@ public class Main extends JFrame {
     boolean isShowPoints = true;
     boolean is_draw_dev = false;
     int count_dev = 3;
-    List<Point> connectedPoints = null;
+    List<Point2D> connectedPoints = null;
     boolean connect_points = false;
+    Point2D position = new Point2D(0, 0);
+    Point2D move_speed = new Point2D(-20, -20);
+    Point2D window_half_size;
+    double scale = 1;
+    boolean scale_changed = true;
 
     @Override
     public void paint(Graphics g) {
@@ -38,6 +42,8 @@ public class Main extends JFrame {
         canvas = new MyPanel(true);
         canvas.setPreferredSize(new Dimension(w - 20, h - 100));
         canvas.setBackground(Color.WHITE);
+
+        window_half_size = new Point2D((w - 20) / 2., (h - 100) / 2.);
 
         JButton buttonSave = new JButton(),
                 hidePointsButton = new JButton(),
@@ -79,7 +85,7 @@ public class Main extends JFrame {
                 if (bezierLines.isEmpty()) return;
                 if (selectedPoint == null) return;
                 if (connectedPoints != null) {
-                    for (Point p : connectedPoints) {
+                    for (Point2D p : connectedPoints) {
                         p.x = selectedPoint.x;
                         p.y = selectedPoint.y;
                     }
@@ -90,7 +96,7 @@ public class Main extends JFrame {
                 r = r * r;
                 connectedPoints = new ArrayList<>();
                 for (BezierLine line : bezierLines)
-                    for (Point point : line.points)
+                    for (Point2D point : line.points)
                         if ((point.x - selectedPoint.x) * (point.x - selectedPoint.x) + (point.y - selectedPoint.y) * (point.y - selectedPoint.y) <= r && point != selectedPoint) {
                             point.x = selectedPoint.x;
                             point.y = selectedPoint.y;
@@ -155,111 +161,83 @@ public class Main extends JFrame {
             }
         });
 
+        bind_actions(canvasPanel);
+
         content.add(BorderLayout.CENTER, canvasPanel);
 
         setVisible(true);
+    }
+
+    private void bind_actions(JPanel canvasPanel) {
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "MoveUp");
+        canvasPanel.getActionMap().put("MoveUp", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                position.y -= move_speed.y * scale;
+                canvas.repaint();
+            }
+        });
+
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "MoveDown");
+        canvasPanel.getActionMap().put("MoveDown", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                position.y += move_speed.y * scale;
+                canvas.repaint();
+            }
+        });
+
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "MoveLeft");
+        canvasPanel.getActionMap().put("MoveLeft", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                position.x -= move_speed.x * scale;
+                canvas.repaint();
+            }
+        });
+
+
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "MoveRight");
+        canvasPanel.getActionMap().put("MoveRight", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                position.x += move_speed.x * scale;
+                canvas.repaint();
+            }
+        });
+
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, 0), "ScalePlus");
+        canvasPanel.getActionMap().put("ScalePlus", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                scale_changed = true;
+                scale *= 1.1;
+                if (scale > 1000) scale = 1000;
+                canvas.repaint();
+            }
+        });
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, 0), "ScaleMin");
+        canvasPanel.getActionMap().put("ScaleMin", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                scale_changed = true;
+                scale /= 1.1;
+                if (scale < 0.001) scale = 0.001;
+                canvas.repaint();
+            }
+        });
     }
 
 
     public static void main(String[] args) throws IOException {
         Main main = new Main("Первый тест курсового проекта");
 
-    }
-
-    public void drawBezierPoints(int count, Graphics g) {
-        if (count <= 1) return;
-        Point[] resPoints = BezierPoints(points, count);
-        if (resPoints.length == 0) return;
-
-        int r = 1;
-        g.setColor(Color.black);
-        Point lastPoint = null;
-        for (Point point : resPoints) {
-            if (lastPoint != null) g.drawLine(lastPoint.x, lastPoint.y, point.x, point.y);
-            lastPoint = point;
-        }
-    }
-
-    public void drawDottedLine(int x1, int y1, int x2, int y2, int len, Graphics g) {
-        if (len <= 0) return;
-        double lineLen = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-        int count = (int) (lineLen / (len * len));
-        if (count < 7) count = 7;
-
-        double dx = (double) (x2 - x1) / count, dy = (double) (y2 - y1) / count;
-        double lastX = x1, lastY = y1, newX, newY;
-
-        for (int i = 0; i < count; i += 2) {
-            newX = lastX + dx;
-            newY = lastY + dy;
-            g.drawLine((int) lastX, (int) lastY, (int) newX, (int) newY);
-            lastX = newX + dx;
-            lastY = newY + dy;
-        }
-    }
-
-    public Point[] BezierPoints(List<Point> ys, int count) {
-        if (ys.isEmpty()) return new Point[0];
-
-        double k = 1. / (count - 1);
-        int n = ys.size(), cnt = n * (n + 1) / 2;
-        Point[] res = new Point[count];
-        Point2D[] arrY = new Point2D[cnt];
-
-        for (int i = 0; i < n; i++)
-            arrY[i] = new Point2D(ys.get(i));
-
-        double x = 0, mx = 1;
-        int pos = n, index = 0;
-        res[0] = ys.getFirst();
-
-        for (int c = 1; c < count - 1; c++) {
-            x += k;
-            mx -= k;
-            for (int j = n - 1; j > 0; j--) {
-                for (int i = 0; i < j; i++) {
-                    arrY[pos] = Point2D.add(Point2D.multiply(arrY[index], mx), Point2D.multiply(arrY[index + 1], x));
-                    index++;
-                    pos++;
-                }
-                index++;
-            }
-            res[c] = new Point((int) arrY[cnt - 1].x, (int) arrY[cnt - 1].y);
-            pos = n;
-            index = 0;
-        }
-        res[count - 1] = ys.getLast();
-        return res;
-    }
-
-    private void redrawWithColors(Color pointC, Color line, Graphics g, int width, int height) {
-        if (points.isEmpty())
-            return;
-
-        g.setColor(bgColor);
-        g.fillRect(0, 0, width, height);
-
-
-        Point lastPoint = points.getFirst();
-        Point pointNow;
-
-        g.setColor(line);
-        for (int i = 1; i < points.size(); i++) {
-            pointNow = points.get(i);
-            drawDottedLine(lastPoint.x, lastPoint.y, pointNow.x, pointNow.y, 100, g);
-            lastPoint = pointNow;
-        }
-
-        g.setColor(pointC);
-        for (Point point : points)
-            g.fillOval(point.x - pointSize[0] / 2, point.y - pointSize[1] / 2, pointSize[0], pointSize[1]);
-        g.setColor(Color.white);
-        lastPoint = points.getLast();
-        g.fillOval(lastPoint.x - pointSize[0] / 2 + 2, lastPoint.y - pointSize[1] / 2 + 2, pointSize[0] - 4, pointSize[1] - 4);
-    }
-
-    public void redrawLines(Graphics g, int w, int h) {
-        redrawWithColors(pointColor, lineColor, g, w, h);
     }
 
     public void deleteSelectedPoint() {
@@ -296,7 +274,7 @@ public class Main extends JFrame {
                 fw.write(bezierLines.size() + "\n");
                 for (BezierLine bez : bezierLines) {
                     fw.write(bez.points.size() + "|");
-                    for (Point point : bez.points) {
+                    for (Point2D point : bez.points) {
                         fw.write(point.x + " " + point.y);
                         fw.write("|");
                     }
@@ -317,7 +295,7 @@ public class Main extends JFrame {
             if (j.getSelectedFile().isFile()) {
                 try (BufferedReader fw = new BufferedReader(new FileReader(filePath))) {
                     int countBeziers = Integer.parseInt(fw.readLine().strip()), pointsCount;
-                    List<Point> bez;
+                    List<Point2D> bez;
                     String[] points;
                     String[] point;
                     for (int i = 0; i < countBeziers; i++) {
@@ -326,7 +304,7 @@ public class Main extends JFrame {
                         bez = new ArrayList<>();
                         for (int k = 1; k < pointsCount + 1; k++) {
                             point = points[k].split(" ");
-                            bez.add(new Point(Integer.parseInt(point[0]), Integer.parseInt(point[1])));
+                            bez.add(new Point2D(Double.parseDouble(point[0]), Double.parseDouble(point[1])));
                         }
                         bezierLines.add(new BezierLine(bez));
                     }
@@ -362,7 +340,7 @@ public class Main extends JFrame {
                 if (isShowPoints) {
                     if (selectedLine == i) line.pointColor = Color.GREEN;
                     else line.pointColor = Color.DARK_GRAY;
-                    line.redrawLines(g, w, h);
+                    line.redrawLines(window_half_size, scale, position, g, w, h);
                 }
                 if (selectedLine == i && is_draw_dev) {
                     double step = (double) 1 / (count_dev + 1);
@@ -370,18 +348,23 @@ public class Main extends JFrame {
                         line.drawTangent(k * step, Color.DARK_GRAY, g, w, h);
                 }
 
-                line.drawBezierPoints(bezierCount, g);
+                line.drawBezierPoints(window_half_size, scale, position, bezierCount, g, scale_changed || line.need_redraw);
+
+                line.need_redraw = false;
             }
+            scale_changed = false;
         }
 
         @Override
         public void mouseClicked(MouseEvent e) {
             if (e.getButton() == 3) {
-                bezierLines.add(new BezierLine(e.getPoint()));
+                bezierLines.add(new BezierLine(new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus())));
                 selectedLine = bezierLines.size() - 1;
-            } else if (selectedLine >= 0 && bezierLines.get(selectedLine).is_composite < 1)
-                bezierLines.get(selectedLine).points.add(e.getPoint());
-
+            } else if (selectedLine >= 0 && bezierLines.get(selectedLine).is_composite < 1) {
+                BezierLine bezierLine = bezierLines.get(selectedLine);
+                bezierLine.points.add(new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus()));
+                bezierLine.need_redraw = true;
+            }
             repaint();
         }
 
@@ -390,15 +373,54 @@ public class Main extends JFrame {
             if (bezierLines.isEmpty()) return;
 
             //if (points.isEmpty()) return;
-            Point pos = e.getPoint(), sel;
-
-            int p = -1, d = pointSize[0] / 2 + 5;
+            Point2D pos = new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus()), sel;
+            Point2D p2 = new Point2D(e.getPoint());
+            int p = -1, d = Math.min(Math.max((int) ((pointSize[0] / 2. + 5) * scale), 1), 100);
             for (BezierLine line : bezierLines) {
                 sel = line.getNearPoint(pos, d);
+                //sel = line.getNearPoint_transpose(window_half_size, scale, position, p2, (pointSize[0] / 2. + 5));
                 if (sel != null) {
+                    line.need_redraw = true;
                     if (connect_points) {
-                        BezierLine l = bezierLines.get(p + 1);
+                        if (selectedLine != -1 && selectedPoint != null) {
+                            BezierLine l2 = bezierLines.get(selectedLine);
+                            if (l2 != null) l2.need_redraw = true;
+                            System.out.println("start");
+                            if (line != l2 && l2 != null && l2.points.size() > 2 && line.points.size() > 2) {
+                                int t1 = -1, t2 = -1;
+                                if (selectedPoint == l2.points.getLast()) t1 = 1;
+                                else if (selectedPoint == l2.points.getFirst()) t1 = 0;
+                                if (sel == line.points.getLast()) t2 = 1;
+                                else if (sel == line.points.getFirst()) t2 = 0;
 
+                                if (t1 != -1 && t2 != -1 && l2.joinedLines[t1] == null && line.joinedLines[t2] == null) {
+                                    BezierLine comp = new BezierLine(new Point2D(selectedPoint));
+                                    Point2D p11 = l2.points.get(1 + t1 * (l2.points.size() - 3)), p21 = line.points.get(1 + t2 * (line.points.size() - 3));
+//                                    comp.points.add(Point2D.find_intersect_point(p11, selectedPoint, p21, sel));
+                                    comp.points.add(Point2D.div(Point2D.multiply(selectedPoint, 2), p11));
+                                    comp.points.add(Point2D.div(Point2D.multiply(sel, 2), p21));
+
+                                    comp.points.add(new Point2D(sel));
+                                    comp.joined_points = new Point2D[][]{new Point2D[]{selectedPoint, p11}, new Point2D[]{sel, p21}};
+                                    comp.joinedLines[0] = l2;
+                                    comp.joinedLines[1] = line;
+                                    l2.joinedLines[t1] = comp;
+                                    line.joinedLines[t2] = comp;
+                                    l2.joined_points[t1][0] = comp.points.getFirst();
+                                    l2.joined_points[t1][1] = comp.points.get(1);
+                                    line.joined_points[t2][0] = comp.points.getLast();
+                                    line.joined_points[t2][1] = comp.points.get(comp.points.size() - 2);
+                                    comp.is_composite = 2;
+                                    l2.add_comp(t1);
+                                    line.add_comp(t2);
+                                    bezierLines.add(comp);
+
+                                }
+
+                            }
+                        }
+                        connect_points = false;
+                        System.out.println("off");
                     }
                     selectedPoint = sel;
                     selectedLine = p + 1;
@@ -438,7 +460,7 @@ public class Main extends JFrame {
 
         @Override
         public void mouseDragged(MouseEvent e) {
-            Point ePoint = e.getPoint();
+            Point2D ePoint = new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus());
             if (selectedPoint != null) {
                 int type_m = 0;
                 BezierLine selected = bezierLines.get(selectedLine);
@@ -448,6 +470,7 @@ public class Main extends JFrame {
                     selectedPoint.x = ePoint.x;
                     selectedPoint.y = ePoint.y;
                 }
+                selected.need_redraw = true;
                 repaint();
             }
         }
