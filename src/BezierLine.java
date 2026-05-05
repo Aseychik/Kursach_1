@@ -3,55 +3,133 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BezierLine {
-    List<Point2D> points;
-    private Point2D[] cachedScreenPoints;
+    public List<Point2D> points;
+
+    private double[] worldX;
+    private double[] worldY;
+    boolean needsWorldUpdate = true;
+
+    private int[] screenX;
+    private int[] screenY;
+    private double lastScale = -1;
+    private double lastCamX = Double.NaN;
+    private double lastCamY = Double.NaN;
+
+    private double[] calcBufferX;
+    private double[] calcBufferY;
+
     int[] pointSize = new int[]{12, 12};
     Color lineColor = Color.black, pointColor = Color.green;
-    int bezierCount = 100;
-    boolean need_redraw = true;
-
-    // 0 - not composite, 1 - composite at the right, -1 - composite at the left
-    // 2 - composite at the both sides
     int is_composite = 0;
     Point2D[][] joined_points = new Point2D[2][2];
     BezierLine[] joinedLines = new BezierLine[2];
 
-    private int calculateDynamicCount(double scale) {
-        if (points.size() < 2) return 2;
 
-        double totalLength = 0;
-        for (int i = 0; i < points.size() - 1; i++) {
-            Point2D p1 = points.get(i);
-            Point2D p2 = points.get(i + 1);
-            totalLength += Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    public void markDirty(boolean b) {
+        needsWorldUpdate = true;
+        if (b) {
+            if (joinedLines[0] != null) joinedLines[0].markDirty(false);
+            if (joinedLines[1] != null) joinedLines[1].markDirty(false);
+        }
+    }
+
+    private void updateWorldCache(int count) {
+        if (!needsWorldUpdate && worldX != null && worldX.length == count) return;
+
+        int n = points.size();
+
+        if (worldX == null || worldX.length != count || n != calcBufferX.length) {
+            worldX = new double[count];
+            worldY = new double[count];
+            calcBufferX = new double[n];
+            calcBufferY = new double[n];
         }
 
-        double pixelsPerSegment = 4.0;
-        int count = (int) ((totalLength / scale) / pixelsPerSegment);
+        double dt = 1.0 / (count - 1);
 
-        return Math.max(10, Math.min(count, 5000));
+        n = points.size();
+        for (int c = 0; c < count; c++) {
+            double t = c * dt;
+            double mt = 1.0 - t;
+
+            for (int i = 0; i < n; i++) {
+                calcBufferX[i] = points.get(i).x;
+                calcBufferY[i] = points.get(i).y;
+            }
+
+            for (int j = 1; j < n; j++) {
+                for (int i = 0; i < n - j; i++) {
+                    calcBufferX[i] = calcBufferX[i] * mt + calcBufferX[i + 1] * t;
+                    calcBufferY[i] = calcBufferY[i] * mt + calcBufferY[i + 1] * t;
+                }
+            }
+            worldX[c] = calcBufferX[0];
+            worldY[c] = calcBufferY[0];
+        }
+        needsWorldUpdate = false;
+    }
+
+    public void drawBezierPoints(Point2D half_window, double scale, Point2D pos, Graphics g) {
+        if (!isVisible(half_window, scale, pos)) return;
+
+        int count = calculateDynamicCount(scale);
+        if (count < 2) return;
+        boolean b = needsWorldUpdate;
+        updateWorldCache(count);
+
+        if (b || scale != lastScale || pos.x != lastCamX || pos.y != lastCamY || screenX == null || screenX.length != count) {
+            if (screenX == null || screenX.length != count) {
+                screenX = new int[count];
+                screenY = new int[count];
+            }
+
+            for (int i = 0; i < count; i++) {
+                screenX[i] = (int) (half_window.x + (worldX[i] + pos.x) / scale);
+                screenY[i] = (int) (half_window.y + (worldY[i] + pos.y) / scale);
+            }
+            lastScale = scale;
+            lastCamX = pos.x;
+            lastCamY = pos.y;
+        }
+
+        g.setColor(lineColor);
+        g.drawPolyline(screenX, screenY, count);
+    }
+
+    private int calculateDynamicCount(double scale) {
+        if (points.size() <= 2) return 2;
+        double totalLength = 0;
+        Point2D lastPoint = null;
+        for (Point2D point : points) {
+            if (lastPoint != null) {
+                totalLength += Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y);
+            }
+            lastPoint = point;
+        }
+        double pixelsPerPoint = 4.0;
+        return Math.max(10, Math.min((int) ((totalLength / scale) / pixelsPerPoint), 5000));
     }
 
     private boolean isVisible(Point2D half_window, double scale, Point2D pos) {
         if (points.isEmpty()) return false;
-
-        Point2D minP = new Point2D(Double.MAX_VALUE, Double.MAX_VALUE), maxP = new Point2D(-Double.MAX_VALUE, -Double.MAX_VALUE);
+        double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
+        double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
 
         for (Point2D p : points) {
-            if (p.x < minP.x) minP.x = p.x;
-            if (p.x > maxP.x) maxP.x = p.x;
-            if (p.y < minP.y) minP.y = p.y;
-            if (p.y > maxP.y) maxP.y = p.y;
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
         }
 
-        minP = Point2D.add(minP.transpose(half_window, scale, pos), half_window.u_minus());
-        maxP = Point2D.add(maxP.transpose(half_window, scale, pos), half_window.u_minus());
+        double screenMinX = half_window.x + (minX + pos.x) / scale;
+        double screenMaxX = half_window.x + (maxX + pos.x) / scale;
+        double screenMinY = half_window.y + (minY + pos.y) / scale;
+        double screenMaxY = half_window.y + (maxY + pos.y) / scale;
 
-        return !((maxP.x < -half_window.x) || (minP.x > half_window.x) ||
-                (maxP.y < -half_window.y) || (minP.y > half_window.y));
+        return !(screenMaxX < 0 || screenMinX > half_window.x * 2 ||
+                screenMaxY < 0 || screenMinY > half_window.y * 2);
     }
-
-
 
     public void add_comp(int t) {
         if (is_composite == 1 && t == 0) is_composite = 2;
@@ -119,7 +197,7 @@ public class BezierLine {
         this.points = points;
     }
 
-    public void drawBezierPoints(Point2D half_window, double scale, Point2D pos, int count, Graphics g, boolean redraw) {
+    /*public void drawBezierPoints(Point2D half_window, double scale, Point2D pos, int count, Graphics g, boolean redraw) {
         if (!isVisible(half_window, scale, pos)) {
             System.out.println("nd");
             return;
@@ -138,12 +216,12 @@ public class BezierLine {
             if (lastPoint != null) g.drawLine((int)lastPoint.x, (int)lastPoint.y, (int)point.x, (int)point.y);
             lastPoint = point;
         }
-    }
+    }*/
 
     public void drawDottedLine(int x1, int y1, int x2, int y2, int len, Graphics g) {
         if (len <= 0) return;
         double lineLen = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-        int count = (int) (lineLen / (len * len));
+        int count = (int) (Math.sqrt(lineLen) / len);
         if (count < 7) count = 7;
 
         double dx = (double) (x2 - x1) / count, dy = (double) (y2 - y1) / count;
@@ -237,7 +315,61 @@ public class BezierLine {
         return true;
     }
 
-    private void redrawWithColors(Point2D half_window, double scale, Point2D position, Color pointC, Color line, Graphics g, int width, int height) {
+
+    private boolean isSegmentVisible(Point2D p1, Point2D p2, Point2D half_window, double scale, Point2D position) {
+        double screenLeft = position.x - half_window.x / scale;
+        double screenTop = position.y - half_window.y / scale;
+        double screenRight = position.x + half_window.x / scale;
+        double screenBottom = position.y + half_window.y / scale;
+
+        boolean p1Inside = p1.x >= screenLeft && p1.x <= screenRight &&
+                p1.y >= screenTop && p1.y <= screenBottom;
+        boolean p2Inside = p2.x >= screenLeft && p2.x <= screenRight &&
+                p2.y >= screenTop && p2.y <= screenBottom;
+
+        if (p1Inside || p2Inside) {
+            return true;
+        }
+        Point2D leftTop = new Point2D(screenLeft, screenTop);
+        Point2D leftBottom = new Point2D(screenLeft, screenBottom);
+        Point2D rightTop = new Point2D(screenRight, screenTop);
+        Point2D rightBottom = new Point2D(screenRight, screenBottom);
+
+        if (segmentsIntersect(p1, p2, leftTop, leftBottom)) return true;
+        if (segmentsIntersect(p1, p2, rightTop, rightBottom)) return true;
+        if (segmentsIntersect(p1, p2, leftTop, rightTop)) return true;
+        return segmentsIntersect(p1, p2, leftBottom, rightBottom);
+    }
+
+    private boolean segmentsIntersect(Point2D a1, Point2D a2, Point2D b1, Point2D b2) {
+        double o1 = orientation(a1, a2, b1);
+        double o2 = orientation(a1, a2, b2);
+        double o3 = orientation(b1, b2, a1);
+        double o4 = orientation(b1, b2, a2);
+
+        if (o1 != o2 && o3 != o4) {
+            return true;
+        }
+
+        if (o1 == 0 && onSegment(a1, b1, a2)) return true;
+        if (o2 == 0 && onSegment(a1, b2, a2)) return true;
+        if (o3 == 0 && onSegment(b1, a1, b2)) return true;
+        if (o4 == 0 && onSegment(b1, a2, b2)) return true;
+
+        return false;
+    }
+
+    private double orientation(Point2D p, Point2D q, Point2D r) {
+        return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+    }
+
+    private boolean onSegment(Point2D p, Point2D q, Point2D r) {
+        return q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) &&
+                q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y);
+    }
+
+
+    private void redrawWithColors(Point2D half_window, double scale, Point2D position, Color pointC, Color line, Graphics g) {
         if (points.isEmpty())
             return;
 
@@ -247,7 +379,16 @@ public class BezierLine {
         g.setColor(line);
         for (int i = 1; i < points.size(); i++) {
             pointNow = points.get(i).transpose(half_window, scale, position);
-            drawDottedLine((int)lastPoint.x, (int)lastPoint.y, (int)pointNow.x, (int)pointNow.y, 100, g);
+
+
+            Point2D worldLast = points.get(i - 1);
+            Point2D worldNow = points.get(i);
+
+            if (isSegmentVisible(worldLast, worldNow, half_window, scale, position)) {
+                drawDottedLine((int)lastPoint.x, (int)lastPoint.y, (int)pointNow.x, (int)pointNow.y, 50, g);
+            }
+
+            //drawDottedLine((int)lastPoint.x, (int)lastPoint.y, (int)pointNow.x, (int)pointNow.y, 50, g);
             lastPoint = pointNow;
         }
 
@@ -399,8 +540,8 @@ public class BezierLine {
         return true;
     }
 
-    public void redrawLines(Point2D half_window, double scale, Point2D pos, Graphics g, int w, int h) {
-        redrawWithColors(half_window, scale, pos, pointColor, lineColor, g, w, h);
+    public void redrawLines(Point2D half_window, double scale, Point2D pos, Graphics g) {
+        redrawWithColors(half_window, scale, pos, pointColor, lineColor, g);
     }
 
     public Point2D getNearPoint(Point2D p0, int dist) {
@@ -411,6 +552,27 @@ public class BezierLine {
                 return point;
         }
         return null;
+    }
+
+    public Point2D findNearestInRadius(int mouseX, int mouseY, int radius, Point2D half_window, double scale, Point2D position) {
+        double r2 = (double) radius * radius;
+        double minDistance2 = Double.MAX_VALUE;
+        Point2D bestPoint = null;
+
+        for (Point2D p : points) {
+            double sx = half_window.x + (p.x + position.x) / scale;
+            double sy = half_window.y + (p.y + position.y) / scale;
+
+            double dx = mouseX - sx;
+            double dy = mouseY - sy;
+            double d2 = dx * dx + dy * dy;
+
+            if (d2 <= r2 && d2 < minDistance2) {
+                minDistance2 = d2;
+                bestPoint = p;
+            }
+        }
+        return bestPoint;
     }
 
     public Point2D getNearPoint_transpose(Point2D hw, double scale, Point2D position, Point2D p0, double dist) {

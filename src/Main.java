@@ -4,6 +4,7 @@ import java.awt.event.*;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static java.lang.Math.*;
 
@@ -278,6 +279,15 @@ public class Main extends JFrame {
                         fw.write(point.x + " " + point.y);
                         fw.write("|");
                     }
+                    if (bez.is_composite != 0) {
+                        for (int i = 0; i < 2; i++) {
+                            if (bez.joinedLines[i] != null) {
+                                fw.write((int)bezierLines.indexOf(bez.joinedLines[i]) + "|");
+                                fw.write((int)(bez.joinedLines[i].joinedLines[1] == bez ? 1 : 0) + "|");
+                            } else
+                                fw.write("-1|-1|");
+                        }
+                    }
                     fw.write('\n');
                 }
             } catch (
@@ -289,7 +299,8 @@ public class Main extends JFrame {
 
     public void ImportFromFile() {
         JFileChooser j = new JFileChooser();
-
+        List<int[]> queue_compose = new ArrayList<>();
+        int shift = bezierLines.size();
         if (j.showOpenDialog(null) == 0) {
             String filePath = j.getSelectedFile().getAbsolutePath();
             if (j.getSelectedFile().isFile()) {
@@ -304,10 +315,29 @@ public class Main extends JFrame {
                         bez = new ArrayList<>();
                         for (int k = 1; k < pointsCount + 1; k++) {
                             point = points[k].split(" ");
-                            bez.add(new Point2D(Double.parseDouble(point[0]), Double.parseDouble(point[1])));
+                            bez.add(new Point2D((Double.parseDouble(point[0])) * scale - position.x, (Double.parseDouble(point[1])) * scale - position.y));
+                        }
+                        if (points.length > pointsCount + 1 && !Objects.equals(points[pointsCount + 1], "")) {
+                            for (int comp = 0; comp < 2; comp++) {
+                                int line_compose_num = Integer.parseInt(points[comp * 2 + pointsCount + 1]);
+                                if (line_compose_num != -1) {
+                                    queue_compose.add(new int[] {i, comp, line_compose_num, Integer.parseInt(points[comp * 2 + pointsCount + 2])});
+                                }
+                            }
                         }
                         bezierLines.add(new BezierLine(bez));
                     }
+                    for (int[] arr : queue_compose) {
+                        BezierLine line = bezierLines.get(arr[0] + shift);
+                        int type = arr[1];
+                        BezierLine joined = bezierLines.get(arr[2] + shift);
+                        line.joinedLines[type] = joined;
+                        line.joined_points[type][0] = joined.points.get(arr[3] * (joined.points.size() - 1));
+                        line.joined_points[type][1] = joined.points.get(arr[3] == 0 ? 1 : joined.points.size() - 2);
+                        line.add_comp(type);
+                    }
+
+
                     selectedLine = -1;
                     selectedPoint = null;
                     connectedPoints = null;
@@ -340,7 +370,7 @@ public class Main extends JFrame {
                 if (isShowPoints) {
                     if (selectedLine == i) line.pointColor = Color.GREEN;
                     else line.pointColor = Color.DARK_GRAY;
-                    line.redrawLines(window_half_size, scale, position, g, w, h);
+                    line.redrawLines(window_half_size, scale, position, g);
                 }
                 if (selectedLine == i && is_draw_dev) {
                     double step = (double) 1 / (count_dev + 1);
@@ -348,9 +378,7 @@ public class Main extends JFrame {
                         line.drawTangent(k * step, Color.DARK_GRAY, g, w, h);
                 }
 
-                line.drawBezierPoints(window_half_size, scale, position, bezierCount, g, scale_changed || line.need_redraw);
-
-                line.need_redraw = false;
+                line.drawBezierPoints(window_half_size, scale, position, g);
             }
             scale_changed = false;
         }
@@ -363,83 +391,93 @@ public class Main extends JFrame {
             } else if (selectedLine >= 0 && bezierLines.get(selectedLine).is_composite < 1) {
                 BezierLine bezierLine = bezierLines.get(selectedLine);
                 bezierLine.points.add(new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus()));
-                bezierLine.need_redraw = true;
+                bezierLine.markDirty(true);
             }
             repaint();
         }
+
 
         @Override
         public void mousePressed(MouseEvent e) {
             if (bezierLines.isEmpty()) return;
 
-            //if (points.isEmpty()) return;
-            Point2D pos = new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus()), sel;
-            Point2D p2 = new Point2D(e.getPoint());
-            int p = -1, d = Math.min(Math.max((int) ((pointSize[0] / 2. + 5) * scale), 1), 100);
+            int mx = e.getX();
+            int my = e.getY();
+            int clickRadius = 15;
+
+            Point2D bestPoint = null;
+            BezierLine bestLine = null;
+            double globalMinDist2 = Double.MAX_VALUE;
+
             for (BezierLine line : bezierLines) {
-                sel = line.getNearPoint(pos, d);
-                //sel = line.getNearPoint_transpose(window_half_size, scale, position, p2, (pointSize[0] / 2. + 5));
-                if (sel != null) {
-                    line.need_redraw = true;
-                    if (connect_points) {
-                        if (selectedLine != -1 && selectedPoint != null) {
-                            BezierLine l2 = bezierLines.get(selectedLine);
-                            if (l2 != null) l2.need_redraw = true;
-                            System.out.println("start");
-                            if (line != l2 && l2 != null && l2.points.size() > 2 && line.points.size() > 2) {
-                                int t1 = -1, t2 = -1;
-                                if (selectedPoint == l2.points.getLast()) t1 = 1;
-                                else if (selectedPoint == l2.points.getFirst()) t1 = 0;
-                                if (sel == line.points.getLast()) t2 = 1;
-                                else if (sel == line.points.getFirst()) t2 = 0;
+                Point2D p = line.findNearestInRadius(mx, my, clickRadius, window_half_size, scale, position);
 
-                                if (t1 != -1 && t2 != -1 && l2.joinedLines[t1] == null && line.joinedLines[t2] == null) {
-                                    BezierLine comp = new BezierLine(new Point2D(selectedPoint));
-                                    Point2D p11 = l2.points.get(1 + t1 * (l2.points.size() - 3)), p21 = line.points.get(1 + t2 * (line.points.size() - 3));
-//                                    comp.points.add(Point2D.find_intersect_point(p11, selectedPoint, p21, sel));
-                                    comp.points.add(Point2D.div(Point2D.multiply(selectedPoint, 2), p11));
-                                    comp.points.add(Point2D.div(Point2D.multiply(sel, 2), p21));
+                if (p != null) {
+                    double sx = window_half_size.x + (p.x + position.x) / scale;
+                    double sy = window_half_size.y + (p.y + position.y) / scale;
+                    double d2 = (mx - sx) * (mx - sx) + (my - sy) * (my - sy);
 
-                                    comp.points.add(new Point2D(sel));
-                                    comp.joined_points = new Point2D[][]{new Point2D[]{selectedPoint, p11}, new Point2D[]{sel, p21}};
-                                    comp.joinedLines[0] = l2;
-                                    comp.joinedLines[1] = line;
-                                    l2.joinedLines[t1] = comp;
-                                    line.joinedLines[t2] = comp;
-                                    l2.joined_points[t1][0] = comp.points.getFirst();
-                                    l2.joined_points[t1][1] = comp.points.get(1);
-                                    line.joined_points[t2][0] = comp.points.getLast();
-                                    line.joined_points[t2][1] = comp.points.get(comp.points.size() - 2);
-                                    comp.is_composite = 2;
-                                    l2.add_comp(t1);
-                                    line.add_comp(t2);
-                                    bezierLines.add(comp);
+                    if (d2 < globalMinDist2) {
+                        globalMinDist2 = d2;
+                        bestPoint = p;
+                        bestLine = line;
+                    }
+                }
+            }
 
-                                }
+            if (bestPoint != null) {
+                bestLine.markDirty(true);
 
+                if (connect_points) {
+                    if (selectedLine != -1 && selectedPoint != null) {
+                        BezierLine l2 = bezierLines.get(selectedLine);
+                        if (l2 != null) l2.markDirty(true);
+
+                        if (bestLine != l2 && l2 != null && l2.points.size() > 2 && bestLine.points.size() > 2) {
+                            int t1 = -1, t2 = -1;
+                            if (selectedPoint == l2.points.getLast()) t1 = 1;
+                            else if (selectedPoint == l2.points.getFirst()) t1 = 0;
+
+                            if (bestPoint == bestLine.points.getLast()) t2 = 1;
+                            else if (bestPoint == bestLine.points.getFirst()) t2 = 0;
+
+                            if (t1 != -1 && t2 != -1 && l2.joinedLines[t1] == null && bestLine.joinedLines[t2] == null) {
+                                BezierLine comp = new BezierLine(new Point2D(selectedPoint));
+                                Point2D p11 = l2.points.get(1 + t1 * (l2.points.size() - 3));
+                                Point2D p21 = bestLine.points.get(1 + t2 * (bestLine.points.size() - 3));
+
+                                comp.points.add(Point2D.div(Point2D.multiply(selectedPoint, 2), p11));
+                                comp.points.add(Point2D.div(Point2D.multiply(bestPoint, 2), p21));
+
+                                comp.points.add(new Point2D(bestPoint));
+                                comp.joined_points = new Point2D[][]{{selectedPoint, p11}, {bestPoint, p21}};
+                                comp.joinedLines[0] = l2;
+                                comp.joinedLines[1] = bestLine;
+                                l2.joinedLines[t1] = comp;
+                                bestLine.joinedLines[t2] = comp;
+                                l2.joined_points[t1][0] = comp.points.getFirst();
+                                l2.joined_points[t1][1] = comp.points.get(1);
+                                bestLine.joined_points[t2][0] = comp.points.getLast();
+                                bestLine.joined_points[t2][1] = comp.points.get(comp.points.size() - 2);
+                                comp.is_composite = 2;
+                                l2.add_comp(t1);
+                                bestLine.add_comp(t2);
+                                bezierLines.add(comp);
                             }
                         }
-                        connect_points = false;
-                        System.out.println("off");
                     }
-                    selectedPoint = sel;
-                    selectedLine = p + 1;
-                    repaint();
-                    return;
+                    connect_points = false;
                 }
-                ++p;
+
+                selectedPoint = bestPoint;
+                selectedLine = bezierLines.indexOf(bestLine);
+                repaint();
+                return;
             }
 
             selectedPoint = null;
             connectedPoints = null;
-
-            /*for (Point point : points) {
-                if ((point.x - pos.x) * (point.x - pos.x) + (point.y - pos.y) * (point.y - pos.y) <= (pointSize[0] / 2 + 5) * (pointSize[0] / 2 + 5)) {
-                    selectedPoint = point;
-                    return;
-                }
-            }*/
-            //points.add(e.getPoint());
+            //selectedLine = -1;
             repaint();
         }
 
@@ -470,8 +508,10 @@ public class Main extends JFrame {
                     selectedPoint.x = ePoint.x;
                     selectedPoint.y = ePoint.y;
                 }
-                selected.need_redraw = true;
+                selected.markDirty(true);
                 repaint();
+            } else if (selectedLine != -1 && selectedLine < bezierLines.size()) {
+                bezierLines.get(selectedLine).markDirty(true);
             }
         }
 
