@@ -26,6 +26,8 @@ public class Main extends JFrame {
     Point2D window_half_size;
     double scale = 1;
     boolean scale_changed = true;
+    int can_undo = -1;
+
 
     @Override
     public void paint(Graphics g) {
@@ -161,6 +163,21 @@ public class Main extends JFrame {
                 canvas.repaint();
             }
         });
+
+
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, 0, true), "UndoInsert");
+        canvasPanel.getActionMap().put("UndoInsert", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (can_undo >= 0 && bezierLines.size() > can_undo) {
+                    bezierLines.subList(bezierLines.size() - can_undo, bezierLines.size()).clear();
+                    can_undo = -1;
+                    repaint();
+                }
+            }
+        });
+
 
         bind_actions(canvasPanel);
 
@@ -306,6 +323,7 @@ public class Main extends JFrame {
             if (j.getSelectedFile().isFile()) {
                 try (BufferedReader fw = new BufferedReader(new FileReader(filePath))) {
                     int countBeziers = Integer.parseInt(fw.readLine().strip()), pointsCount;
+
                     List<Point2D> bez;
                     String[] points;
                     String[] point;
@@ -342,6 +360,7 @@ public class Main extends JFrame {
                     selectedPoint = null;
                     connectedPoints = null;
                     canvas.repaint();
+                    can_undo = countBeziers;
                 } catch (
                         IOException e) {
                     throw new RuntimeException(e);
@@ -385,6 +404,7 @@ public class Main extends JFrame {
 
         @Override
         public void mouseClicked(MouseEvent e) {
+            can_undo = -1;
             if (e.getButton() == 3) {
                 bezierLines.add(new BezierLine(new Point2D(e.getPoint()).transpose(position.u_minus(), 1 / scale, window_half_size.u_minus())));
                 selectedLine = bezierLines.size() - 1;
@@ -400,6 +420,7 @@ public class Main extends JFrame {
         @Override
         public void mousePressed(MouseEvent e) {
             if (bezierLines.isEmpty()) return;
+            can_undo = -1;
 
             int mx = e.getX();
             int my = e.getY();

@@ -24,7 +24,6 @@ public class BezierLine {
     Point2D[][] joined_points = new Point2D[2][2];
     BezierLine[] joinedLines = new BezierLine[2];
 
-
     public void markDirty(boolean b) {
         needsWorldUpdate = true;
         if (b) {
