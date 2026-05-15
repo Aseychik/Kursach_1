@@ -24,12 +24,56 @@ public class BezierLine {
     Point2D[][] joined_points = new Point2D[2][2];
     BezierLine[] joinedLines = new BezierLine[2];
 
+
+    boolean is_on_line = false;
+    Point2D[] res_points;
+
+
     public void markDirty(boolean b) {
         needsWorldUpdate = true;
         if (b) {
             if (joinedLines[0] != null) joinedLines[0].markDirty(false);
             if (joinedLines[1] != null) joinedLines[1].markDirty(false);
         }
+    }
+
+    public void find_points() {
+        if (points.size() != 4) return;
+        res_points = new Point2D[4];
+        res_points[0] = points.getFirst();
+        res_points[3] = points.getLast();
+
+        double t1 = 0.33;
+        double t2 = 0.67;
+
+        double A1 = Math.pow(1 - t1, 3);
+        double B1 = 3 * Math.pow(1 - t1, 2) * t1;
+        double C1 = 3 * (1 - t1) * Math.pow(t1, 2);
+        double D1 = Math.pow(t1, 3);
+
+        double A2 = Math.pow(1 - t2, 3);
+        double B2 = 3 * Math.pow(1 - t2, 2) * t2;
+        double C2 = 3 * (1 - t2) * Math.pow(t2, 2);
+        double D2 = Math.pow(t2, 3);
+
+        double det = B1 * C2 - B2 * C1;
+
+        double right1x = points.get(1).x - A1 * res_points[0].x - D1 * res_points[3].x;
+        double right2x = points.get(2).x - A2 * res_points[0].x - D2 * res_points[3].x;
+
+        double x1 = (right1x * C2 - right2x * C1) / det;
+        double x2 = (B1 * right2x - B2 * right1x) / det;
+
+        double right1y = points.get(1).y - A1 * res_points[0].y - D1 * res_points[3].y;
+        double right2y = points.get(2).y - A2 * res_points[0].y - D2 * res_points[3].y;
+
+        double y1 = (right1y * C2 - right2y * C1) / det;
+        double y2 = (B1 * right2y - B2 * right1y) / det;
+
+        res_points[1] = new Point2D(x1, y1);
+        res_points[2] = new Point2D(x2, y2);
+        is_on_line = true;
+        //points = List.of(res_points[0], res_points[1], res_points[2], res_points[3]);
     }
 
     private void updateWorldCache(int count) {
@@ -47,13 +91,21 @@ public class BezierLine {
         double dt = 1.0 / (count - 1);
 
         n = points.size();
+        if (is_on_line) find_points();
         for (int c = 0; c < count; c++) {
             double t = c * dt;
             double mt = 1.0 - t;
 
-            for (int i = 0; i < n; i++) {
-                calcBufferX[i] = points.get(i).x;
-                calcBufferY[i] = points.get(i).y;
+            if (is_on_line && points.size() == 4) {
+                for (int i = 0; i < n; i++) {
+                    calcBufferX[i] = res_points[i].x;
+                    calcBufferY[i] = res_points[i].y;
+                }
+            } else {
+                for (int i = 0; i < n; i++) {
+                    calcBufferX[i] = points.get(i).x;
+                    calcBufferY[i] = points.get(i).y;
+                }
             }
 
             for (int j = 1; j < n; j++) {
@@ -384,7 +436,7 @@ public class BezierLine {
             Point2D worldNow = points.get(i);
 
             if (isSegmentVisible(worldLast, worldNow, half_window, scale, position)) {
-                drawDottedLine((int)lastPoint.x, (int)lastPoint.y, (int)pointNow.x, (int)pointNow.y, 50, g);
+                drawDottedLine((int) lastPoint.x, (int) lastPoint.y, (int) pointNow.x, (int) pointNow.y, 50, g);
             }
 
             //drawDottedLine((int)lastPoint.x, (int)lastPoint.y, (int)pointNow.x, (int)pointNow.y, 50, g);
@@ -398,7 +450,7 @@ public class BezierLine {
         }
         g.setColor(Color.white);
         lastPoint = points.getLast().transpose(half_window, scale, position);
-        g.fillOval((int)lastPoint.x - pointSize[0] / 2 + 2, (int)lastPoint.y - pointSize[1] / 2 + 2, pointSize[0] - 4, pointSize[1] - 4);
+        g.fillOval((int) lastPoint.x - pointSize[0] / 2 + 2, (int) lastPoint.y - pointSize[1] / 2 + 2, pointSize[0] - 4, pointSize[1] - 4);
     }
 
     public Point2D proec(Point2D p1, Point2D p2, Point2D p3) {
@@ -422,8 +474,7 @@ public class BezierLine {
                 joined_points[0][0].x = res.x;
                 joined_points[0][0].y = res.y;
                 return false;
-            }
-            else if (is_composite > 0 && points.getLast() == selectedPoint) {
+            } else if (is_composite > 0 && points.getLast() == selectedPoint) {
                 Point2D res = proec(joined_points[1][1], points.get(points.size() - 2), ePoint);
                 if (res == null) return true;
                 Point2D p1 = points.getLast();
@@ -434,8 +485,7 @@ public class BezierLine {
                 return false;
             }
 
-        }
-        else {
+        } else {
             Point2D[] pp = null;
             if ((is_composite == -1 || is_composite == 2) && points.getFirst() == selectedPoint)
                 pp = new Point2D[]{joined_points[0][0], joined_points[0][1], points.get(1)};
@@ -476,7 +526,7 @@ public class BezierLine {
             selectedPoint.y = ePoint.y;
             Point2D next = new Point2D(joined_points[lr][1]);
             Point2D np = Point2D.add(Point2D.multiply(Point2D.div(new Point2D(selectedPoint), next).normalize(), Point2D.div(new Point2D(joined_points[lr][0]), next).length()), next);
-            Point2D first =  lr == 0 ? points.getFirst() : points.getLast();
+            Point2D first = lr == 0 ? points.getFirst() : points.getLast();
             joined_points[lr][0].x = np.x;
             joined_points[lr][0].y = np.y;
             first.x = np.x;

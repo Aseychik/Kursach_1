@@ -178,6 +178,21 @@ public class Main extends JFrame {
             }
         });
 
+        canvasPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, 0, true), "AccTest");
+        canvasPanel.getActionMap().put("AccTest", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (selectedLine != -1) {
+                    BezierLine l = bezierLines.get(selectedLine);
+                    if (l.is_on_line) l.is_on_line = false;
+                    else l.find_points();
+                    l.markDirty(false);
+                }
+                repaint();
+            }
+        });
+
 
         bind_actions(canvasPanel);
 
