@@ -247,27 +247,6 @@ public class BezierLine {
         this.points = points;
     }
 
-    /*public void drawBezierPoints(Point2D half_window, double scale, Point2D pos, int count, Graphics g, boolean redraw) {
-        if (!isVisible(half_window, scale, pos)) {
-            System.out.println("nd");
-            return;
-        }
-
-        count = calculateDynamicCount(scale);
-        if (count <= 1) return;
-        Point2D[] resPoints = redraw ? BezierPoints(half_window, scale, pos, points, count) : cachedScreenPoints;
-        cachedScreenPoints = resPoints;
-        if (resPoints.length == 0) return;
-
-        int r = 1;
-        g.setColor(Color.black);
-        Point2D lastPoint = null;
-        for (Point2D point : resPoints) {
-            if (lastPoint != null) g.drawLine((int)lastPoint.x, (int)lastPoint.y, (int)point.x, (int)point.y);
-            lastPoint = point;
-        }
-    }*/
-
     public void drawDottedLine(int x1, int y1, int x2, int y2, int len, Graphics g) {
         if (len <= 0) return;
         double lineLen = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
@@ -348,7 +327,6 @@ public class BezierLine {
         if (t < 0 || t > 1) return false;
 
         Point2D[] der = getDerivative(t);
-        //der[0] = der[0].transpose(half_screen, scale, pos);
         der[1] = der[1].transpose(half_screen, scale, pos);
 
         if (der[0].x == 0 && der[0].y == 0) return false;
@@ -442,7 +420,6 @@ public class BezierLine {
                 drawDottedLine((int) lastPoint.x, (int) lastPoint.y, (int) pointNow.x, (int) pointNow.y, 50, g);
             }
 
-            //drawDottedLine((int)lastPoint.x, (int)lastPoint.y, (int)pointNow.x, (int)pointNow.y, 50, g);
             lastPoint = pointNow;
         }
 
@@ -552,9 +529,6 @@ public class BezierLine {
             prev.x = t2.x;
             prev.y = t2.y;
         } catch (Exception exception) {
-            // теоретически должно быть, но тогда нужно сделать то, как оттаскивать эти точки
-            /*selected.joined_points[0][1].x = ePoint.x;
-            selected.joined_points[0][1].y = ePoint.y;*/
             System.out.println(exception.getMessage());
         }
     }

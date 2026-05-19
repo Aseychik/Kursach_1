@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static java.lang.Math.*;
 
 public class Main extends JFrame {
     Point2D selectedPoint = null;
@@ -268,7 +267,7 @@ public class Main extends JFrame {
 
 
     public static void main(String[] args) throws IOException {
-        Main main = new Main("Первый тест курсового проекта");
+        Main main = new Main("Курсовая работа Асеев");
 
     }
 
