@@ -17,8 +17,8 @@ public class Main extends JFrame {
     int[] pointSize = new int[]{12, 12};
     int bezierCount = 100;
     boolean isShowPoints = true;
-    boolean is_draw_dev = false;
-    int count_dev = 3;
+    boolean is_draw_dev = true;
+    int count_dev = 4;
     List<Point2D> connectedPoints = null;
     boolean connect_points = false;
     Point2D position = new Point2D(0, 0);
@@ -110,7 +110,6 @@ public class Main extends JFrame {
         };
 
         buttonSave.setAction(saveAction);
-        //saveAction.putValue(Action.MNEMONIC_KEY, KeyEvent.VK_S);
         buttonSave.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), "Save");
         buttonSave.getActionMap().put("Save", saveAction);
 
@@ -276,7 +275,6 @@ public class Main extends JFrame {
     public void deleteSelectedPoint() {
         if (selectedPoint == null || selectedLine == -1) return;
 
-        // потом придумать, как лучше удалять или точнее - что делать при удалении точек участвующих в создании составных кривых
         BezierLine line = bezierLines.get(selectedLine);
         if ((line.is_composite == -1 || line.is_composite == 2) &&
                 (selectedPoint == line.points.getFirst() || selectedPoint == line.points.get(1)))
@@ -407,9 +405,9 @@ public class Main extends JFrame {
                     line.redrawLines(window_half_size, scale, position, g);
                 }
                 if (selectedLine == i && is_draw_dev) {
-                    double step = (double) 1 / (count_dev + 1);
-                    for (int k = 1; k <= count_dev; k++)
-                        line.drawTangent(k * step, Color.DARK_GRAY, g, w, h);
+                    double step = (double) 1 / (count_dev);
+                    for (int k = 0; k <= count_dev; k++)
+                        line.drawTangent(k * step, window_half_size, scale, position, Color.DARK_GRAY, g, w, h);
                 }
 
                 line.drawBezierPoints(window_half_size, scale, position, g);
@@ -513,7 +511,6 @@ public class Main extends JFrame {
 
             selectedPoint = null;
             connectedPoints = null;
-            //selectedLine = -1;
             repaint();
         }
 

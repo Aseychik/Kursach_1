@@ -73,7 +73,6 @@ public class BezierLine {
         res_points[1] = new Point2D(x1, y1);
         res_points[2] = new Point2D(x2, y2);
         is_on_line = true;
-        //points = List.of(res_points[0], res_points[1], res_points[2], res_points[3]);
     }
 
     private void updateWorldCache(int count) {
@@ -341,18 +340,21 @@ public class BezierLine {
             index++;
         }
         return new Point2D[]{new Point2D((arrY[cnt - 2].x - arrY[cnt - 3].x) * n, (arrY[cnt - 2].y - arrY[cnt - 3].y) * n),
-                new Point2D((int) arrY[cnt - 1].x, (int) arrY[cnt - 1].y)
+                new Point2D(arrY[cnt - 1].x, arrY[cnt - 1].y)
         };
     }
 
-    public boolean drawTangent(double t, Color lineColor, Graphics g, int width, int height) {
+    public boolean drawTangent(double t, Point2D half_screen, double scale, Point2D pos, Color lineColor, Graphics g, int width, int height) {
         if (t < 0 || t > 1) return false;
 
         Point2D[] der = getDerivative(t);
+        //der[0] = der[0].transpose(half_screen, scale, pos);
+        der[1] = der[1].transpose(half_screen, scale, pos);
+
         if (der[0].x == 0 && der[0].y == 0) return false;
 
 
-        g.setColor(lineColor);
+        g.setColor(Color.RED);
         if (Math.abs(der[0].x) <= 1e-5) {
             if (Math.abs(der[0].y) <= 1e-5) return false;
             double k = der[0].x / der[0].y, b;
@@ -363,6 +365,7 @@ public class BezierLine {
         double k = der[0].y / der[0].x, b;
         b = der[1].y - der[1].x * k;
         g.drawLine(0, (int) b, width, (int) (k * width + b));
+        g.setColor(lineColor);
         return true;
     }
 
