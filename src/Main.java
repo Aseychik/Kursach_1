@@ -16,7 +16,7 @@ public class Main extends JFrame {
     int[] pointSize = new int[]{12, 12};
     int bezierCount = 100;
     boolean isShowPoints = true;
-    boolean is_draw_dev = true;
+    boolean is_draw_dev = false;
     int count_dev = 4;
     List<Point2D> connectedPoints = null;
     boolean connect_points = false;
